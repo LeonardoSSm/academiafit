@@ -1,0 +1,36 @@
+{
+  "alunos": [
+    {
+      "id": "1",
+      "nome": "Ana Souza",
+      "cpf": "00000000191",
+      "cep": "60115070",
+      "logradouro": "Rua A",
+      "bairro": "Centro",
+      "cidade": "Fortaleza",
+      "uf": "CE",
+      "status": "ATIVO",
+      "telefone": "85999990000",
+      "email": "ana@ex.com"
+    }
+  ],
+  "planos": [
+    {
+      "id": "1",
+      "nome": "Mensal",
+      "duracaoMeses": 1,
+      "preco": 99.9,
+      "status": "ATIVO"
+    }
+  ],
+  "matriculas": [
+    {
+      "id": "1",
+      "alunoId": 1,
+      "planoId": 1,
+      "dataInicio": "2025-11-01",
+      "dataFim": "2025-12-01",
+      "situacao": "ATIVA"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    color-scheme: light;
+  }
+
+  body {
+    @apply m-0 min-h-screen bg-slate-950 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.25),_transparent_60%),radial-gradient(circle_at_bottom,_rgba(15,118,110,0.2),_transparent_55%)] font-sans text-slate-100;
+  }
+
+  a {
+    @apply text-brand-300 transition-colors hover:text-brand-200;
+  }
+}
