@@ -1,138 +1,141 @@
-import React, { useMemo } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import Table from "../../components/Table";
-import { api, getErrorMsg } from "../../services/api";
-import { useApp } from "../../context/AppContext";
+import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Box,
+  Button,
+  Pagination,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
+import Table from "../../components/Table";
+import LoadingState from "../../components/feedback/LoadingState";
+import ErrorState from "../../components/feedback/ErrorState";
+import { api, getErrorMsg, getWithAbort } from "../../services/api";
+import { useDispatch, useSelector } from "react-redux";
+import { setFiltros } from "../../store/filtersSlice";
 
-const fetchAlunos = async () => (await api.get("/alunos")).data;
+const PAGE_LIMIT = 5;
 
-const buttonBase =
-  "rounded-xl border px-3 py-2 text-xs font-semibold uppercase tracking-wide transition-colors";
+const fetchAlunos = async ({ queryKey }) => {
+  const [_key, { page, search }] = queryKey;
+  const response = await getWithAbort("alunos-list", "/alunos", {
+    params: {
+      _page: page,
+      _limit: PAGE_LIMIT,
+      q: search || undefined,
+    },
+  });
+  return {
+    items: response.data,
+    total: Number(response.headers["x-total-count"] || response.data.length),
+  };
+};
 
 export default function AlunosList() {
-  const { filtros, setFiltros } = useApp();
-  const nav = useNavigate();
+  const filtros = useSelector((state) => state.filters);
+  const dispatch = useDispatch();
+  const [page, setPage] = useState(1);
   const qc = useQueryClient();
-  const { data = [], isLoading, isError, error } = useQuery({ queryKey: ["alunos"], queryFn: fetchAlunos });
+  const navigate = useNavigate();
+
+  const { data, isLoading, isError, error, refetch, isFetching } = useQuery({
+    queryKey: ["alunos", { page, search: filtros.busca }],
+    queryFn: fetchAlunos,
+    keepPreviousData: true,
+  });
 
   const delMut = useMutation({
     mutationFn: async (id) => api.delete(`/alunos/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["alunos"] })
+    onSuccess: () => {
+      toast.success("Aluno excluído");
+      qc.invalidateQueries({ queryKey: ["alunos"] });
+    },
+    onError: (err) => toast.error(getErrorMsg(err)),
   });
 
-  const filtered = useMemo(() => {
-    const q = filtros.busca.toLowerCase();
-    return data.filter(a =>
-      a.nome.toLowerCase().includes(q) || a.cpf?.includes(q)
-    );
-  }, [data, filtros.busca]);
+  const columns = useMemo(
+    () => [
+      { key: "nome", label: "Nome" },
+      { key: "cpf", label: "CPF" },
+      { key: "status", label: "Status" },
+      {
+        key: "acoes",
+        label: "Ações",
+        render: (row) => (
+          <Stack direction="row" spacing={1}>
+            <Button size="small" onClick={() => navigate(`/alunos/${row.id}/ver`)} variant="outlined">
+              Ver
+            </Button>
+            <Button size="small" onClick={() => navigate(`/alunos/${row.id}`)}>
+              Editar
+            </Button>
+            <Button
+              size="small"
+              color="error"
+              onClick={() => {
+                if (confirm(`Excluir ${row.nome}?`)) delMut.mutate(row.id);
+              }}
+            >
+              Excluir
+            </Button>
+          </Stack>
+        ),
+      },
+    ],
+    [navigate, delMut]
+  );
 
-  const columns = [
-    { key: "nome", label: "Nome" },
-    { key: "cpf", label: "CPF" },
-    {
-      key: "status",
-      label: "Status",
-      render: (row) => (
-        <span
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-            row.status === "ATIVO"
-              ? "bg-emerald-100 text-emerald-700"
-              : "bg-slate-200 text-slate-600"
-          }`}
-        >
-          {row.status}
-        </span>
-      ),
-    },
-    {
-      key: "acoes",
-      label: "Ações",
-      render: (row) => (
-        <div className="flex flex-wrap gap-2">
-          <button
-            className={`${buttonBase} border-slate-200 text-slate-700 hover:bg-slate-100`}
-            onClick={() => nav(`/alunos/${row.id}`)}
-          >
-            Editar
-          </button>
-          <button
-            className={`${buttonBase} border-red-200 text-red-600 hover:bg-red-50`}
-            onClick={() => {
-              if (confirm(`Excluir ${row.nome}?`)) delMut.mutate(row.id);
-            }}
-          >
-            Excluir
-          </button>
-        </div>
-      ),
-    },
-  ];
+  if (isLoading) return <LoadingState label="Carregando alunos..." />;
+  if (isError) return <ErrorState message={getErrorMsg(error)} onRetry={refetch} />;
 
-  if (isLoading)
-    return (
-      <div className="flex items-center gap-3 rounded-2xl border border-dashed border-brand-200 bg-brand-50/40 px-4 py-3 text-sm text-brand-700">
-        <span className="h-3 w-3 animate-ping rounded-full bg-brand-500" />
-        Carregando alunos...
-      </div>
-    );
-  if (isError)
-    return (
-      <div className="rounded-2xl border border-red-200/60 bg-red-50 px-4 py-3 text-sm text-red-700">
-        Erro: {getErrorMsg(error)}
-      </div>
-    );
-
-  const total = data.length;
-  const ativos = data.filter((a) => a.status === "ATIVO").length;
-  const inativos = total - ativos;
+  const totalPages = Math.max(1, Math.ceil((data?.total || 0) / PAGE_LIMIT));
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-500">
-            Visão geral
-          </p>
-          <h2 className="text-3xl font-semibold text-slate-900">Alunos</h2>
-          <p className="text-sm text-slate-500">
-            Consulte, cadastre e gerencie seus alunos ativos.
-          </p>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <input
-            className="rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100"
-            placeholder="Buscar por nome ou CPF"
-            value={filtros.busca}
-            onChange={(e) => setFiltros({ ...filtros, busca: e.target.value })}
-          />
-          <Link
-            to="/alunos/novo"
-            className="rounded-lg bg-brand-600 px-4 py-2 text-center text-sm font-medium text-white shadow hover:bg-brand-500"
-          >
-            Novo aluno
-          </Link>
-        </div>
-      </div>
+    <Stack spacing={3}>
+      <Stack
+        direction={{ xs: "column", md: "row" }}
+        spacing={2}
+        alignItems={{ md: "center" }}
+        justifyContent="space-between"
+      >
+        <Box>
+          <Typography variant="h5">Alunos</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Consulta com paginação e busca integrada ao JSON Server (_page, _limit, q).
+          </Typography>
+        </Box>
+        <TextField
+          label="Buscar por nome ou CPF"
+          value={filtros.busca}
+          onChange={(e) => {
+            dispatch(setFiltros({ busca: e.target.value }));
+            setPage(1);
+          }}
+          size="small"
+        />
+      </Stack>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {[
-          { label: "Total", value: total, tone: "text-slate-900", bg: "from-slate-100/70 to-white" },
-          { label: "Ativos", value: ativos, tone: "text-emerald-700", bg: "from-emerald-50 to-white" },
-          { label: "Inativos", value: inativos, tone: "text-amber-600", bg: "from-amber-50 to-white" },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            className={`rounded-2xl border border-slate-100 bg-gradient-to-br ${stat.bg} p-4 shadow-sm`}
-          >
-            <p className="text-xs uppercase tracking-wide text-slate-500">{stat.label}</p>
-            <p className={`text-3xl font-semibold ${stat.tone}`}>{stat.value}</p>
-          </div>
-        ))}
-      </div>
+      {isFetching && <LoadingState label="Atualizando lista..." />}
 
-      <Table columns={columns} data={filtered} />
-    </div>
+      <Table columns={columns} data={data?.items || []} />
+
+      <Stack direction={{ xs: "column", md: "row" }} alignItems="center" justifyContent="space-between">
+        <Typography variant="body2" color="text.secondary">
+          Exibindo {(page - 1) * PAGE_LIMIT + 1}-
+          {Math.min(page * PAGE_LIMIT, data?.total || 0)} de {data?.total || 0}
+        </Typography>
+        <Pagination
+          count={totalPages}
+          page={page}
+          onChange={(_, value) => setPage(value)}
+          color="primary"
+          showFirstButton
+          showLastButton
+        />
+      </Stack>
+    </Stack>
   );
 }

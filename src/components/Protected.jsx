@@ -1,14 +1,15 @@
-import React from "react";
-import { useApp } from "../context/AppContext";
+import { useEffect } from "react";
 import { Navigate } from "react-router-dom";
+import toast from "react-hot-toast";
+import { useSelector } from "react-redux";
 
-export default function Protected({ children }) {
-  const { auth } = useApp();
-  if (!auth?.user) return <Navigate to="/" replace />;
+export default function Protected({ children, requiredRole = "ADMIN" }) {
+  const auth = useSelector((state) => state.auth);
+  const allowed = auth?.user && (!requiredRole || auth?.role === requiredRole);
 
-  return (
-    <div className="rounded-3xl border border-slate-100 bg-gradient-to-br from-slate-50 to-white px-10 py-16 text-center shadow-inner">
-      {children}
-    </div>
-  );
+  useEffect(() => {
+    if (!allowed) toast.error("Acesso negado");
+  }, [allowed]);
+
+  return allowed ? children : <Navigate to="/" replace />;
 }

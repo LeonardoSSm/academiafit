@@ -1,90 +1,224 @@
-import React, { useState } from "react";
+import { useState } from "react";
+import {
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Grid,
+  MenuItem,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import toast from "react-hot-toast";
 import Table from "../../components/Table";
 import { api, getErrorMsg } from "../../services/api";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import LoadingState from "../../components/feedback/LoadingState";
+import ErrorState from "../../components/feedback/ErrorState";
 
-const fetchPlanos = async () => (await api.get("/planos")).data;
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+const fetchPlanos = async () => (await api.get("/planos")).data;
 
-const inputClass =
-  "rounded-lg border border-slate-200 px-3 py-2 text-sm shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-100";
-
-export default function PlanosList(){
-  const [novo, setNovo] = useState({ nome:"", duracaoMeses:1, preco: 0, status:"ATIVO" });
-  const { data = [], isLoading, isError, error } = useQuery({ queryKey:["planos"], queryFn: fetchPlanos });
+export default function PlanosList() {
+  const [novo, setNovo] = useState({ nome: "", duracaoMeses: 1, preco: 0, status: "ATIVO" });
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState(null);
   const qc = useQueryClient();
+  const { data = [], isLoading, isError, error, refetch } = useQuery({
+    queryKey: ["planos"],
+    queryFn: fetchPlanos,
+  });
 
   const createMut = useMutation({
-    mutationFn: (p) => api.post("/planos", p),
-    onSuccess: () => { qc.invalidateQueries({ queryKey:["planos"] }); setNovo({ nome:"", duracaoMeses:1, preco:0, status:"ATIVO" }); }
+    mutationFn: (payload) => api.post("/planos", payload),
+    onSuccess: () => {
+      toast.success("Plano criado");
+      qc.invalidateQueries({ queryKey: ["planos"] });
+      setNovo({ nome: "", duracaoMeses: 1, preco: 0, status: "ATIVO" });
+    },
+    onError: (err) => toast.error(getErrorMsg(err)),
   });
-  const delMut = useMutation({ mutationFn: (id)=>api.delete(`/planos/${id}`), onSuccess: ()=> qc.invalidateQueries({ queryKey:["planos"] }) });
+
+  const updateMut = useMutation({
+    mutationFn: ({ id, ...payload }) => api.put(`/planos/${id}`, payload),
+    onSuccess: () => {
+      toast.success("Plano atualizado");
+      qc.invalidateQueries({ queryKey: ["planos"] });
+      setDialogOpen(false);
+    },
+    onError: (err) => toast.error(getErrorMsg(err)),
+  });
+
+  const delMut = useMutation({
+    mutationFn: (id) => api.delete(`/planos/${id}`),
+    onSuccess: () => {
+      toast.success("Plano excluído");
+      qc.invalidateQueries({ queryKey: ["planos"] });
+    },
+    onError: (err) => toast.error(getErrorMsg(err)),
+  });
+
+  const handleCreate = (event) => {
+    event.preventDefault();
+    if (!novo.nome || novo.duracaoMeses <= 0 || novo.preco < 0) {
+      toast.error("Preencha corretamente os campos.");
+      return;
+    }
+    createMut.mutate(novo);
+  };
+
+  const openDialog = (plan) => {
+    setSelectedPlan(plan);
+    setDialogOpen(true);
+  };
 
   const columns = [
-    { key:"nome", label:"Nome" },
-    { key:"duracaoMeses", label:"Meses" },
-    { key:"preco", label:"Preço", render:(row)=> currency.format(row.preco || 0) },
-    { key:"status", label:"Status", render:(row)=> (
-      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
-        row.status === "ATIVO" ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
-      }`}>
-        {row.status}
-      </span>
-    ) },
-    { key:"acoes", label:"Ações", render:(row)=>
-      <button
-        className="rounded-lg border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
-        onClick={()=> delMut.mutate(row.id)}
-      >
-        Excluir
-      </button>
-    }
+    { key: "nome", label: "Nome" },
+    { key: "duracaoMeses", label: "Meses" },
+    {
+      key: "preco",
+      label: "Preço",
+      render: (row) => currency.format(row.preco || 0),
+    },
+    { key: "status", label: "Status" },
+    {
+      key: "acoes",
+      label: "Ações",
+      render: (row) => (
+        <Stack direction="row" spacing={1}>
+          <Button size="small" variant="outlined" onClick={() => openDialog(row)}>
+            Editar
+          </Button>
+          <Button
+            size="small"
+            color="error"
+            onClick={() => {
+              if (confirm("Excluir plano?")) delMut.mutate(row.id);
+            }}
+          >
+            Excluir
+          </Button>
+        </Stack>
+      ),
+    },
   ];
 
-  if (isLoading)
-    return (
-      <div className="flex items-center gap-3 text-slate-500">
-        <span className="h-3 w-3 animate-ping rounded-full bg-brand-500" />
-        Carregando planos...
-      </div>
-    );
-  if (isError)
-    return (
-      <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-        Erro: {getErrorMsg(error)}
-      </div>
-    );
+  if (isLoading) return <LoadingState label="Carregando planos..." />;
+  if (isError) return <ErrorState message={getErrorMsg(error)} onRetry={refetch} />;
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-semibold text-slate-900">Planos</h2>
-        <p className="text-sm text-slate-500">Crie diferentes ofertas e mantenha a tabela organizada.</p>
-      </div>
-      <form
-        onSubmit={(e)=>{ e.preventDefault(); createMut.mutate(novo); }}
-        className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm sm:flex-row sm:items-end"
-      >
-        <label className="flex flex-1 flex-col gap-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Nome</span>
-          <input className={inputClass} placeholder="Mensal VIP" value={novo.nome} onChange={e=>setNovo(s=>({ ...s, nome:e.target.value }))}/>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Meses</span>
-          <input type="number" className={inputClass} min={1} placeholder="1" value={novo.duracaoMeses} onChange={e=>setNovo(s=>({ ...s, duracaoMeses:+e.target.value }))}/>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Preço</span>
-          <input type="number" className={inputClass} step="0.01" placeholder="99.90" value={novo.preco} onChange={e=>setNovo(s=>({ ...s, preco:+e.target.value }))}/>
-        </label>
-        <button
-          type="submit"
-          className="rounded-lg bg-brand-600 px-5 py-2 text-sm font-semibold text-white shadow hover:bg-brand-500 disabled:opacity-50"
-        >
-          Adicionar
-        </button>
+    <Stack spacing={3}>
+      <Typography variant="h5">Planos</Typography>
+      <form onSubmit={handleCreate}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={4}>
+            <TextField
+              label="Nome"
+              value={novo.nome}
+              onChange={(e) => setNovo((prev) => ({ ...prev, nome: e.target.value }))}
+              fullWidth
+            />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField
+              type="number"
+              label="Meses"
+              value={novo.duracaoMeses}
+              onChange={(e) => setNovo((prev) => ({ ...prev, duracaoMeses: Number(e.target.value) }))}
+              inputProps={{ min: 1 }}
+              fullWidth
+            />
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <TextField
+              type="number"
+              label="Preço"
+              value={novo.preco}
+              onChange={(e) => setNovo((prev) => ({ ...prev, preco: Number(e.target.value) }))}
+              inputProps={{ min: 0, step: 0.01 }}
+              fullWidth
+            />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField
+              select
+              label="Status"
+              value={novo.status}
+              onChange={(e) => setNovo((prev) => ({ ...prev, status: e.target.value }))}
+              fullWidth
+            >
+              <MenuItem value="ATIVO">Ativo</MenuItem>
+              <MenuItem value="INATIVO">Inativo</MenuItem>
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={1}>
+            <Button type="submit" variant="contained" fullWidth sx={{ height: "100%" }}>
+              Adicionar
+            </Button>
+          </Grid>
+        </Grid>
       </form>
-      <Table columns={columns} data={data}/>
-    </div>
+
+      <Table columns={columns} data={data} />
+
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Editar plano</DialogTitle>
+        <DialogContent dividers>
+          {selectedPlan && (
+            <Stack spacing={2} mt={1}>
+              <TextField
+                label="Nome"
+                value={selectedPlan.nome}
+                onChange={(e) => setSelectedPlan((prev) => ({ ...prev, nome: e.target.value }))}
+              />
+              <TextField
+                type="number"
+                label="Meses"
+                value={selectedPlan.duracaoMeses}
+                onChange={(e) =>
+                  setSelectedPlan((prev) => ({ ...prev, duracaoMeses: Number(e.target.value) }))
+                }
+                inputProps={{ min: 1 }}
+              />
+              <TextField
+                type="number"
+                label="Preço"
+                value={selectedPlan.preco}
+                onChange={(e) =>
+                  setSelectedPlan((prev) => ({ ...prev, preco: Math.max(0, Number(e.target.value)) }))
+                }
+                inputProps={{ min: 0, step: 0.01 }}
+              />
+              <TextField
+                select
+                label="Status"
+                value={selectedPlan.status}
+                onChange={(e) => setSelectedPlan((prev) => ({ ...prev, status: e.target.value }))}
+              >
+                <MenuItem value="ATIVO">Ativo</MenuItem>
+                <MenuItem value="INATIVO">Inativo</MenuItem>
+              </TextField>
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Cancelar</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (!selectedPlan.nome || selectedPlan.duracaoMeses <= 0 || selectedPlan.preco < 0) {
+                toast.error("Preencha corretamente os campos.");
+                return;
+              }
+              updateMut.mutate(selectedPlan);
+            }}
+          >
+            Salvar
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Stack>
   );
 }
