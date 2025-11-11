@@ -47,5 +47,3 @@ Se não definir, `http://localhost:3333` será usado por padrão.
 - As listagens usam `_page/_limit`, porém JSON Server não ordena por padrão — ajuste os parâmetros conforme necessidade.
 - As páginas de detalhes fazem múltiplas requisições (join manual); para grandes volumes considere um backend consolidado.
 - As máscaras são simples e não cobrem todos os formatos (telefone, etc.).
-
-Sinta-se à vontade para evoluir o schema do `db.json`, adicionar mais testes e ajustar o tema do Material UI conforme o branding da sua academia.
